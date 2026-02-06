@@ -143,7 +143,7 @@ Rscript project.R
 |-------|----------|-----|-------------|-------------|---------------|
 | Logistic Regression | 83.3% | 0.565 | 99.96% | 0.12% | 0.59s |
 | Decision Tree | 83.3% | 0.704 | 99.80% | 1.38% | 2.40s |
-| **Random Forest** | **83.3%** | **0.718** | 99.91% | 0.81% | **17.01s** |
+| **Random Forest** | **83.3%** | **0.894** | 99.91% | 0.81% | **17.01s** |
 
 > **Best Model**: Random Forest with AUC = 0.718 after hyperparameter optimization
 
