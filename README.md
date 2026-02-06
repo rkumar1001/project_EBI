@@ -1,60 +1,88 @@
-# 🚗 Traffic Accident Severity Prediction
+# 🚗 Accident Severity Prediction Under Weather & Visibility Conditions
 
-A comprehensive machine learning project to predict traffic accident severity using environmental, road infrastructure, and weather conditions data. Built with R for statistical analysis and predictive modeling.
+A comprehensive machine learning project analyzing ~7.5M U.S. traffic accident records to predict accident severity using weather, visibility, and road infrastructure features. Built with R featuring advanced stratified sampling, hyperparameter-tuned models, and SHAP-based interpretability.
+
 
 ## 📋 Project Overview
 
-This project analyzes traffic accident data to predict whether an accident will be **low severity** (severity levels 1-2: minor injuries/property damage) or **high severity** (severity levels 3-4: serious injuries/fatalities). The binary classification approach enables targeted emergency response and resource allocation.
+This project implements a complete machine learning pipeline for predicting traffic accident severity (Low vs High) using environmental and road conditions. The binary classification enables targeted emergency response and resource allocation.
 
-### Key Applications
+### Key Innovations
+- **Advanced Stratified Sampling**: Combined time-based stratification, H3 spatial indexing, and K-means clustering
+- **Hyperparameter Tuning**: Grid search optimization for Random Forest (36 configurations tested)
+- **SHAP Interpretability**: Model-agnostic explanations for all three classifiers
+- **Trade-offs Analysis**: Comprehensive comparison of model complexity, training time, and performance
+
+### Applications
 - **Emergency Response**: Prioritize resource deployment based on predicted severity
 - **Urban Planning**: Identify dangerous road conditions and infrastructure features
-- **Insurance**: Risk assessment and premium calculation based on conditions
 - **Traffic Management**: Issue weather-based warnings during high-risk conditions
 - **Policy Making**: Data-driven decisions for road safety improvements
 
 ## 📊 Dataset
 
-- **Source**: US Traffic Accident Records
-- **Size**: ~108,928 observations after preprocessing
-- **File**: `updated_final.csv`
-- **Target Variable**: `Severity` (binary: 0 = Low, 1 = High)
-- **Class Distribution**: 92% Low Severity / 8% High Severity (imbalanced)
+| Attribute | Value |
+|-----------|-------|
+| **Source** | US Accidents (March 2023 Release) |
+| **Original Size** | ~7.5 million records |
+| **Sampled Size** | 81,122 records (stratified sample) |
+| **File** | `updated_final.csv` |
+| **Target Variable** | `Severity` (binary: 0 = Low, 1 = High) |
+| **Class Distribution** | 83.6% Low / 16.4% High Severity |
 
-### Features Used (20 Predictors)
+### Stratified Sampling Methodology
+The sampling pipeline (`data_sampling.R`) implements a multi-dimensional stratification approach:
+
+1. **Time-Based Stratification**: Year-Month + Hour bins (Morning/Afternoon/Evening/Night)
+2. **Spatial Stratification**: H3 hexagonal grid at resolution 6 (~36 km² cells)
+3. **Feature-Based Clustering**: K-means (k=10) on weather/visibility features
+4. **Combined Strata**: Proportional sampling from each unique combination
+
+### Features (20 Base + 6 Engineered)
 
 | Category | Features |
 |----------|----------|
 | **Environmental** | Temperature (°F), Wind Chill (°F), Humidity (%), Visibility (mi), Wind Speed (mph), Precipitation (in) |
 | **Road Infrastructure** | Bump, Crossing, Junction, Railway, Roundabout, Stop, Traffic Signal, Traffic Calming, Give Way, No Exit, Station, Turning Loop |
-| **Temporal** | Sunrise/Sunset (Day=1/Night=0 indicator) |
+| **Temporal** | Sunrise/Sunset (Day=1/Night=0) |
 | **Impact** | Distance (mi) - extent of accident impact |
 
 ### Engineered Features
 | Feature | Description |
 |---------|-------------|
 | **Weather_Risk** | Categorical: Poor_Visibility, Precipitation, High_Wind, Normal |
-| **Road_Risk_Score** | Composite score (0-8) summing road infrastructure features |
+| **Visibility_Precip_Interaction** | Visibility × (1 - Precipitation/max) |
+| **Temp_Humidity_Interaction** | Temperature × √(Humidity/100) |
+| **Wind_Chill_Effect** | Normalized temperature drop due to wind |
+| **Temp_Risk** | Categorical: Extreme_Cold, Cold, Normal, Hot, Extreme_Hot |
+| **Visibility_Risk** | Score 0-4 based on visibility thresholds |
 
 ## 🔧 Requirements
 
 ### System Requirements
 - R version 4.0+ (tested on R 4.3.3)
 - Linux/macOS/Windows
+- ~4GB RAM for full dataset processing
+
+### System Dependencies (Linux)
+```bash
+# Required for spatial packages (h3jsr, sf)
+sudo apt-get install -y libudunits2-dev libgdal-dev libproj-dev libgeos-dev
+```
 
 ### R Packages
 ```r
-# Core Data Manipulation
-install.packages(c("ggplot2", "dplyr", "tidyr", "stringr"))
+# Data Sampling Pipeline
+install.packages(c("data.table", "h3jsr", "sf", "dplyr"))
+
+# Core Analysis
+install.packages(c("ggplot2", "tidyr", "stringr", "caret"))
 
 # Machine Learning
-install.packages(c("caret", "rpart", "rpart.plot", "randomForest"))
+install.packages(c("rpart", "rpart.plot", "ranger", "fastshap"))
 
 # Statistical Analysis
-install.packages(c("corrplot", "psych", "PerformanceAnalytics"))
-
-# Model Evaluation
-install.packages(c("pROC", "ROCR"))
+install.packages(c("corrplot", "psych", "PerformanceAnalytics", "pROC"))
 ```
 
 ## 🚀 Usage
@@ -63,158 +91,169 @@ install.packages(c("pROC", "ROCR"))
 # Navigate to project directory
 cd /path/to/project_EBI
 
-# Run the complete analysis
-Rscript project.R
+# Step 1: Run data sampling (if using original 7.5M dataset)
+Rscript data_sampling.R
 
-# Or run interactively in RStudio
-# Open project.R and source the file
+# Step 2: Run complete analysis
+Rscript project.R
 ```
 
 ## 🔬 Methodology
 
 ### Data Preprocessing
-1. **Column Selection**: Dropped irrelevant columns (ID, coordinates, timestamps, descriptions)
-2. **Missing Values**: Removed rows with NA values using `na.omit()`
-3. **Binary Encoding**: Converted boolean strings ("True"/"False") to 1/0
-4. **Target Encoding**: Recoded 4-level severity to binary (1-2 → 0, 3-4 → 1)
+1. **Memory-Efficient Loading**: Using `data.table::fread()` for 7.5M records
+2. **Missing Value Handling**: NA removal with quality verification
+3. **Binary Encoding**: Boolean to 1/0 conversion
+4. **Target Encoding**: 4-level severity → binary (1-2 → 0, 3-4 → 1)
+5. **Feature Engineering**: 6 derived features for enhanced predictive power
 
 ### Train-Test Split
 - **Ratio**: 70% training / 30% testing
 - **Seed**: 123 for reproducibility
-- **Single Split**: Same split used across all models for fair comparison
 
 ## 📈 Models Implemented
 
 ### 1. Logistic Regression
 - **Function**: `glm()` with `family = binomial`
-- **Purpose**: Baseline binary classification model
-- **Output**: Probability scores converted to class predictions (threshold = 0.5)
-- **Metrics**: Confusion matrix, MAE, MSE, AUC
+- **Purpose**: Baseline binary classification
+- **SHAP Analysis**: ✅ Feature importance visualization
 
 ### 2. Decision Tree (CART)
 - **Package**: `rpart`
-- **Purpose**: Interpretable rule-based classification
-- **Visualization**: Tree plot using `rpart.plot`
-- **Advantage**: Easy to understand decision rules
+- **Configuration**: maxdepth=10, minsplit=20, cp=0.001
+- **Visualization**: Tree plot with `rpart.plot`
+- **SHAP Analysis**: ✅ Dependence plots for top features
 
-### 3. Random Forest (Primary Model)
-- **Package**: `randomForest`
-- **Trees**: 100 decision trees
-- **Class Balancing**: Uses `sampsize = c("0" = 5000, "1" = 5000)` for balanced sampling
-- **Feature Importance**: MeanDecreaseGini metric
-- **Validation**: 10-fold cross-validation using `caret`
+### 3. Random Forest (Optimized)
+- **Package**: `ranger` (faster than randomForest)
+- **Hyperparameter Tuning**: Grid search over 36 configurations
+  - `mtry`: 2, 3, 4, 5, 7, 10
+  - `num.trees`: 200, 300, 500
+  - `min.node.size`: 5, 10
+- **Class Balancing**: Case weights (1:5.14 ratio)
+- **Best Parameters**: mtry=5, num.trees=500, min.node.size=10
+- **SHAP Analysis**: ✅ Full interpretability suite
+- **Cross-Validation**: 5-fold CV with ROC optimization
 
 ## 📉 Results
 
 ### Model Performance Comparison
 
-| Model | Accuracy | AUC | Sensitivity | Specificity | Kappa |
-|-------|----------|-----|-------------|-------------|-------|
-| Logistic Regression | 92.3% | 0.622 | 99.9% | 0.04% | 0.001 |
-| Decision Tree | 94.0% | 0.824 | 97.8% | 43.3% | 0.454 |
-| **Random Forest** | **91.8%** | **0.841** | 93.4% | **52.8%** | **0.420** |
+| Model | Accuracy | AUC | Sensitivity | Specificity | Training Time |
+|-------|----------|-----|-------------|-------------|---------------|
+| Logistic Regression | 83.3% | 0.565 | 99.96% | 0.12% | 0.59s |
+| Decision Tree | 83.3% | 0.704 | 99.80% | 1.38% | 2.40s |
+| **Random Forest** | **83.3%** | **0.718** | 99.91% | 0.81% | **17.01s** |
 
-> **Note**: Random Forest achieves the highest AUC (0.841) and best minority class detection (52.8% specificity) despite slightly lower accuracy.
+> **Best Model**: Random Forest with AUC = 0.718 after hyperparameter optimization
+
+### Cross-Validation Results
+- **5-Fold CV ROC**: 0.716
+- **Consistent performance** across folds
 
 ### Top 5 Risk Factors (Feature Importance)
-| Rank | Feature | MeanDecreaseGini |
+| Rank | Feature | Importance Score |
 |------|---------|------------------|
-| 1 | Distance (mi) | 988.0 |
-| 2 | Humidity (%) | 80.2 |
-| 3 | Temperature (°F) | 70.4 |
-| 4 | Wind Chill (°F) | 64.2 |
-| 5 | Wind Speed (mph) | 60.4 |
+| 1 | Distance (mi) | 3512 |
+| 2 | Temp-Humidity Interaction | 1589 |
+| 3 | Wind Chill (°F) | 1217 |
+| 4 | Humidity (%) | 1166 |
+| 5 | Wind Speed (mph) | 1161 |
 
 ### Severity Rate by Weather Condition
-| Weather Condition | Total Accidents | High Severity | Severity Rate |
-|-------------------|-----------------|---------------|---------------|
-| Precipitation | - | - | **16.7%** |
-| High Wind (>20mph) | - | - | 9.1% |
-| Poor Visibility (<2mi) | - | - | 9.0% |
-| Normal | - | - | 7.6% |
+| Weather Condition | Total Accidents | Severity Rate |
+|-------------------|-----------------|---------------|
+| **Precipitation** | 965 | **25.2%** |
+| High Wind (>20mph) | 1,594 | 21.6% |
+| Poor Visibility (<2mi) | 2,870 | 18.2% |
+| Normal | 75,693 | 16.1% |
 
-### High-Risk Condition Thresholds
-- **Visibility**: Severe accidents avg 9.64 mi (vs 9.69 mi overall)
-- **Humidity**: Severe accidents avg 67.1% (vs 65.8% overall)
-- **Temperature**: Severe accidents avg 60.3°F (vs 61.1°F overall)
+### Trade-offs Analysis Insights
+| Insight | Finding |
+|---------|---------|
+| Trees vs AUC | Diminishing returns after ~500 trees |
+| Sample Size | 50k samples achieve 99.9% of full-data AUC |
+| Training Time | RF takes 28x longer than LR for 0.15 AUC gain |
+| Interpretability | LR fully interpretable; RF requires SHAP |
 
 ## 📁 Project Structure
 
 ```
 project_EBI/
-├── project.R           # Main analysis script (474 lines)
-│   ├── Data Loading & Preprocessing (Lines 1-80)
-│   ├── Correlation Analysis (Lines 81-100)
-│   ├── Class Distribution Analysis (Lines 104-130)
-│   ├── Feature Engineering (Lines 131-175)
-│   ├── Logistic Regression (Lines 200-245)
-│   ├── Decision Tree (Lines 250-290)
-│   ├── Random Forest (Lines 295-350)
-│   ├── Cross-Validation (Lines 365-380)
-│   ├── Model Comparison Dashboard (Lines 385-425)
-│   └── Actionable Insights (Lines 430-474)
-├── updated_final.csv   # Dataset (~108,928 rows)
-├── README.md           # Project documentation
-└── Rplots*.pdf         # Generated visualizations (auto-created)
+├── data_sampling.R       # Stratified sampling pipeline
+│   ├── H3 Spatial Indexing (resolution 6)
+│   ├── K-means Clustering (k=10)
+│   ├── Time-based Stratification
+│   └── Quality Verification
+├── project.R             # Main analysis script (~1060 lines)
+│   ├── Data Loading & Preprocessing
+│   ├── Exploratory Data Analysis
+│   ├── Feature Engineering (6 new features)
+│   ├── Logistic Regression + SHAP
+│   ├── Decision Tree + SHAP
+│   ├── Random Forest (Hyperparameter Tuned) + SHAP
+│   ├── Cross-Validation
+│   ├── Trade-offs Analysis
+│   ├── Model Comparison Dashboard
+│   └── Actionable Insights
+├── US_Accidents_March23.csv  # Original dataset (~7.5M records)
+├── updated_final.csv         # Stratified sample (81,122 records)
+├── sampling_metadata.rds     # Sampling process metadata
+├── README.md                 # Project documentation
+└── Rplots*.pdf               # Generated visualizations
 ```
 
 ## 📊 Output Visualizations
 
-The script generates the following visualizations (saved as PDF):
-
 | Plot | Description |
 |------|-------------|
-| **Class Distribution** | Bar chart showing severity class imbalance (92% vs 8%) |
-| **Correlation Matrix** | Spearman correlation heatmap for numeric variables |
-| **Weather Risk Analysis** | Stacked bar chart of severity by weather conditions |
-| **Day vs Night Analysis** | Severity patterns by time of day (conditional) |
-| **Decision Tree Plot** | Visual representation of CART decision rules |
-| **ROC Curve** | Random Forest model discrimination (AUC visualization) |
-| **Feature Importance** | Horizontal bar chart of MeanDecreaseGini scores |
-| **Model Comparison** | Grouped bar chart comparing all model metrics |
+| **Class Distribution** | Bar chart showing severity distribution |
+| **Correlation Matrix** | Spearman correlation heatmap |
+| **Weather Risk Analysis** | Severity by weather conditions |
+| **Feature Importance** | SHAP-based importance for each model |
+| **SHAP Dependence Plots** | Feature effect on predictions |
+| **Decision Tree Plot** | Visual CART decision rules |
+| **ROC Curves** | Model discrimination comparison |
+| **Trade-offs Charts** | Trees vs AUC, Sample size vs Performance |
+| **Model Comparison** | Dashboard comparing all metrics |
 
-## 🔍 Feature Engineering
+## 🔍 SHAP Analysis
 
-### Weather Risk Categories
-Created using `case_when()` with priority order:
-```r
-Poor_Visibility:  Visibility < 2 miles
-Precipitation:    Precipitation > 0.1 inches
-High_Wind:        Wind Speed > 20 mph
-Normal:           All other conditions
-```
+SHAP (SHapley Additive exPlanations) provides model-agnostic interpretability:
 
-### Road Risk Score
-Composite score (0-8) calculated as sum of binary road features:
-```r
-Road_Risk_Score = Bump + Crossing + Junction + Railway + 
-                  Roundabout + Stop + Traffic_Signal + Traffic_Calming
-```
+- **Feature Importance Bar Charts**: Mean |SHAP value| per feature
+- **Dependence Plots**: How feature values affect predictions
+- **Applied to**: All three models (LR, DT, RF)
 
-## ⚠️ Known Limitations
+Example insights from SHAP:
+- Higher distance values consistently increase severity predictions
+- Temperature-humidity interaction shows non-linear effects
+- Wind chill has stronger impact at extreme values
 
-1. **Class Imbalance**: ~92% low severity vs ~8% high severity
-   - **Mitigation**: Balanced sampling in Random Forest (`sampsize`)
-   - Impact: Logistic regression struggles with minority class (0.04% specificity)
+## ⚠️ Limitations & Future Work
 
-2. **Feature Variance**: Some binary road features have limited variance
-   - Many observations have 0 for most road infrastructure features
+### Current Limitations
+1. **Class Imbalance**: Addressed with case weights but specificity remains low
+2. **Temporal Features**: Only Day/Night; finer granularity could improve predictions
+3. **Geographic Patterns**: H3 used for sampling only, not as model feature
 
-3. **Temporal Granularity**: Only Day/Night indicator available
-   - Hour-level or day-of-week patterns cannot be analyzed
+### Future Improvements
+- [ ] XGBoost/LightGBM implementation
+- [ ] SMOTE for synthetic minority oversampling
+- [ ] Time-series features (hour, day-of-week, season)
+- [ ] Geographic features as model inputs
+- [ ] Deep learning approaches (neural networks)
 
-4. **Geographic Context**: Location data (lat/lng, state, county) removed during preprocessing
-   - Regional patterns not captured in current analysis
+## 💡 Key Recommendations
 
-## 💡 Key Recommendations (from Analysis)
+Based on the analysis findings:
 
-1. **Deploy additional resources during poor visibility conditions** - 2.2x higher severity rate
-2. **Issue warnings when precipitation detected** - 16.7% severity rate (highest)
-3. **Focus on intersections with multiple road features** - Road risk score correlates with severity
-4. **Consider time-of-day patterns for patrol scheduling** - Day/night severity differences observed
-
+1. **Deploy additional resources during precipitation** - 25.2% severity rate (highest)
+2. **Issue warnings for high wind conditions** - 21.6% severity rate
+3. **Monitor poor visibility situations** - 18.2% severity rate
+4. **Focus on accidents with higher distance impact** - Top risk factor
+5. **Consider temperature-humidity combinations** - 2nd most important feature
 
 ## 👤 Author
 
-**Rajat**
-
+**Rajat**  
